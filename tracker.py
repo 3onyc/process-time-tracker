@@ -1,8 +1,6 @@
 from __future__ import print_function
-from collections import Counter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 import psutil
 import signal
 import sys
@@ -10,12 +8,17 @@ import time
 
 from models import LogEntry, metadata
 
-INTERVAL=10 # Seconds
+from os.path import basename
+
+import config as cfg
+
+INTERVAL = 10 # Seconds
 PREVIOUS_EXES = set()
 ENGINE = create_engine('sqlite:///db.sqlite', echo=True)
 
 session = sessionmaker(bind=ENGINE)
 metadata.create_all(ENGINE)
+
 
 def get_processes():
     for proc in psutil.process_iter():
@@ -26,11 +29,22 @@ def get_processes():
 
         yield proc
 
+
+def get_exes():
+    for proc in get_processes():
+        base_exe = basename(proc.exe())
+        if base_exe in cfg.track_parts:
+            parts = cfg.track_parts[base_exe]
+            yield proc.exe() + " " + (" ".join(proc.cmdline()[1:parts]))
+        else:
+            yield proc.exe()
+
+
 def main():
     while True:
         global PREVIOUS_EXES
 
-        exes = set([proc.exe() for proc in get_processes()])
+        exes = set(get_exes())
         sess = session()
 
         # New
@@ -46,10 +60,13 @@ def main():
         sess.commit()
         time.sleep(INTERVAL)
 
+
 def on_exit(signum, frame):
     sess = session()
+
     for exe in PREVIOUS_EXES:
         sess.add(LogEntry(exe, LogEntry.STOPPED))
+
     sess.commit()
     sys.exit(0)
 
