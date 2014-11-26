@@ -30,21 +30,19 @@ def get_processes():
         yield proc
 
 
-def get_exes():
-    for proc in get_processes():
-        base_exe = basename(proc.exe())
-        if base_exe in cfg.track_parts:
-            parts = cfg.track_parts[base_exe]
-            yield proc.exe() + " " + (" ".join(proc.cmdline()[1:parts]))
-        else:
-            yield proc.exe()
+def normalize_proc(proc):
+    if basename(proc.exe()) not in cfg.track_parts:
+        return proc.exe()
+
+    parts = cfg.track_parts[basename(proc.exe())]
+    return proc.exe() + " " + (" ".join(proc.cmdline()[1:parts]))
 
 
 def main():
     while True:
         global PREVIOUS_EXES
 
-        exes = set(get_exes())
+        exes = {normalize_proc(proc) for proc in get_processes()}
         sess = session()
 
         # New
